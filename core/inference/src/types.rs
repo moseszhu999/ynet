@@ -92,6 +92,7 @@ pub struct ModelInfo {
 /// Messages for inference coordination over P2P.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InferenceMessage {
+    // === Phase 1: Basic inference ===
     /// Node announces its inference capabilities.
     NodeCapability(NodeCapability),
     /// Forward an inference request to a remote node.
@@ -113,6 +114,103 @@ pub enum InferenceMessage {
         to_peer: String,
         error: String,
     },
+
+    // === Phase 2: Distributed inference ===
+    /// Node announces itself with pricing (Phase 2.1)
+    NodeAnnouncement(NodeAnnouncement),
+    /// Periodic heartbeat to show node is alive
+    NodeHeartbeat {
+        peer_id: String,
+        timestamp: u64,
+        queue_depth: u32,
+        load: f32,
+    },
+    /// Request list of available nodes
+    NodeListRequest {
+        model_filter: Option<String>,
+        max_price: Option<u64>,
+    },
+    /// Response with available nodes
+    NodeListResponse {
+        nodes: Vec<NodeInfo>,
+    },
+    /// Route inference to specific node (from router)
+    RoutedInference {
+        request_id: String,
+        target_peer: String,
+        from_peer: String,
+        request: ChatCompletionRequest,
+        max_price: Option<u64>,
+    },
+    /// Billing record after successful inference
+    InferenceBilling {
+        request_id: String,
+        node_address: String,
+        user_address: String,
+        input_tokens: u32,
+        output_tokens: u32,
+        price_per_1k: u64,
+        total_cost_nynet: u64,
+    },
+}
+
+/// Full node announcement with pricing (Phase 2.1)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeAnnouncement {
+    /// Node's wallet address for receiving payments
+    pub address: String,
+    /// P2P peer ID
+    pub peer_id: String,
+    /// Network addresses (multiaddr format)
+    pub listen_addrs: Vec<String>,
+    /// GPU information
+    pub gpus: Vec<GpuInfo>,
+    /// Total VRAM in MB
+    pub vram_total_mb: u64,
+    /// Available models with pricing
+    pub models: Vec<ModelPricing>,
+    /// Max concurrent requests
+    pub max_concurrent: u32,
+    /// Current queue depth
+    pub queue_depth: u32,
+    /// Current load (0.0 - 1.0)
+    pub load: f32,
+    /// Timestamp of this announcement
+    pub timestamp: u64,
+    /// Node's reputation score (0-100)
+    pub reputation: u32,
+}
+
+/// Model with pricing information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelPricing {
+    /// Model identifier
+    pub model_id: String,
+    /// Backend type
+    pub backend: InferenceBackend,
+    /// Port for this model
+    pub port: u16,
+    /// Price per 1000 input tokens (nYNET)
+    pub price_input_per_1k: u64,
+    /// Price per 1000 output tokens (nYNET)
+    pub price_output_per_1k: u64,
+    /// Max context length
+    pub max_context: u32,
+    /// Average latency in ms
+    pub avg_latency_ms: u32,
+}
+
+/// Simplified node info for routing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeInfo {
+    pub peer_id: String,
+    pub address: String,
+    pub model_id: String,
+    pub price_input_per_1k: u64,
+    pub price_output_per_1k: u64,
+    pub avg_latency_ms: u32,
+    pub load: f32,
+    pub reputation: u32,
 }
 
 /// A node's inference capabilities.

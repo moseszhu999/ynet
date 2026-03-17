@@ -13,8 +13,8 @@ use ynet_chain::{
     Transaction, TxType, Wallet, TARGET_BLOCK_TIME_SECS,
 };
 use ynet_inference::{
-    gateway, InferenceBackend, InferenceMessage, InferenceService, NodeRegistry,
-    StreamEvent,
+    gateway, InferenceBackend, InferenceMessage, InferenceService,
+    NodeRegistry, StreamEvent,
 };
 use ynet_p2p::NetworkNode;
 use ynet_scheduler::{Scheduler, SchedulerMessage, TaskSpec};
@@ -494,6 +494,76 @@ async fn execute_and_report(
 
 // ---- Inference message handler ----
 
+/// Execute inference and stream chunks back via P2P.
+/// This helper function is used by both Phase 1 and Phase 2 inference handlers.
+async fn stream_inference_response(
+    service: &mut InferenceService,
+    model_id: &str,
+    request: &ynet_inference::ChatCompletionRequest,
+    request_id: &str,
+    to_peer: &str,
+    network: &NetworkNode,
+) {
+    match service.infer_stream(model_id, request).await {
+        Ok(response) => {
+            use futures::StreamExt;
+            let mut byte_stream = response.bytes_stream();
+            let mut buffer = String::new();
+
+            while let Some(chunk) = byte_stream.next().await {
+                match chunk {
+                    Ok(bytes) => {
+                        buffer.push_str(&String::from_utf8_lossy(&bytes));
+                        while let Some(pos) = buffer.find("\n\n") {
+                            let line = buffer[..pos].to_string();
+                            buffer = buffer[pos + 2..].to_string();
+
+                            if line.starts_with("data: ") {
+                                let data = &line[6..];
+                                let done = data == "[DONE]";
+                                let msg = InferenceMessage::InferenceChunk {
+                                    request_id: request_id.to_string(),
+                                    to_peer: to_peer.to_string(),
+                                    chunk: data.to_string(),
+                                    done,
+                                };
+                                if let Ok(data) = serde_json::to_vec(&msg) {
+                                    network.broadcast("ynet-inference", data).await;
+                                }
+                                if done {
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let msg = InferenceMessage::InferenceError {
+                            request_id: request_id.to_string(),
+                            to_peer: to_peer.to_string(),
+                            error: e.to_string(),
+                        };
+                        if let Ok(data) = serde_json::to_vec(&msg) {
+                            network.broadcast("ynet-inference", data).await;
+                        }
+                        return;
+                    }
+                }
+            }
+            service.request_completed();
+        }
+        Err(e) => {
+            let msg = InferenceMessage::InferenceError {
+                request_id: request_id.to_string(),
+                to_peer: to_peer.to_string(),
+                error: e,
+            };
+            if let Ok(data) = serde_json::to_vec(&msg) {
+                network.broadcast("ynet-inference", data).await;
+            }
+        }
+    }
+}
+
 async fn handle_inference_message(
     msg: InferenceMessage,
     service: &mut InferenceService,
@@ -517,71 +587,11 @@ async fn handle_inference_message(
         } => {
             let model_id = &request.model;
             if !service.has_model(model_id) {
-                // Not our problem — we don't have this model
                 return;
             }
 
             log::info!("Processing inference request {} for model {}", request_id, model_id);
-
-            // Execute locally and stream chunks back via P2P
-            match service.infer_stream(model_id, &request).await {
-                Ok(response) => {
-                    use futures::StreamExt;
-                    let mut byte_stream = response.bytes_stream();
-                    let mut buffer = String::new();
-
-                    while let Some(chunk) = byte_stream.next().await {
-                        match chunk {
-                            Ok(bytes) => {
-                                buffer.push_str(&String::from_utf8_lossy(&bytes));
-                                while let Some(pos) = buffer.find("\n\n") {
-                                    let line = buffer[..pos].to_string();
-                                    buffer = buffer[pos + 2..].to_string();
-
-                                    if line.starts_with("data: ") {
-                                        let data = &line[6..];
-                                        let done = data == "[DONE]";
-                                        let msg = InferenceMessage::InferenceChunk {
-                                            request_id: request_id.clone(),
-                                            to_peer: from_peer.clone(),
-                                            chunk: data.to_string(),
-                                            done,
-                                        };
-                                        if let Ok(data) = serde_json::to_vec(&msg) {
-                                            network.broadcast("ynet-inference", data).await;
-                                        }
-                                        if done {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                let msg = InferenceMessage::InferenceError {
-                                    request_id: request_id.clone(),
-                                    to_peer: from_peer.clone(),
-                                    error: e.to_string(),
-                                };
-                                if let Ok(data) = serde_json::to_vec(&msg) {
-                                    network.broadcast("ynet-inference", data).await;
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    service.request_completed();
-                }
-                Err(e) => {
-                    let msg = InferenceMessage::InferenceError {
-                        request_id: request_id.clone(),
-                        to_peer: from_peer.clone(),
-                        error: e,
-                    };
-                    if let Ok(data) = serde_json::to_vec(&msg) {
-                        network.broadcast("ynet-inference", data).await;
-                    }
-                }
-            }
+            stream_inference_response(service, model_id, &request, &request_id, &from_peer, network).await;
         }
 
         InferenceMessage::InferenceChunk {
@@ -618,6 +628,130 @@ async fn handle_inference_message(
             if let Some(tx) = pending.get(&request_id) {
                 let _ = tx.send(StreamEvent::Error(error)).await;
             }
+        }
+
+        // === Phase 2: Distributed inference messages ===
+
+        InferenceMessage::NodeAnnouncement(ann) => {
+            log::debug!(
+                "Got announcement from {}: {} models, load {:.2}",
+                ann.peer_id,
+                ann.models.len(),
+                ann.load
+            );
+            registry.update_announcement(ann.clone());
+            let mut reg = gateway_state.registry.lock().await;
+            reg.update_announcement(ann);
+        }
+
+        InferenceMessage::NodeHeartbeat {
+            peer_id,
+            timestamp: _,
+            queue_depth,
+            load,
+        } => {
+            log::trace!("Heartbeat from {}: queue={}, load={:.2}", peer_id, queue_depth, load);
+            // Update registry with latest status
+            if let Some(cap) = registry.get_node(&peer_id) {
+                let mut updated = cap.clone();
+                updated.queue_depth = queue_depth;
+                registry.update(updated.clone());
+                let mut reg = gateway_state.registry.lock().await;
+                reg.update(updated);
+            }
+            if let Some(ann) = registry.get_announcement(&peer_id) {
+                let mut updated_ann = ann.clone();
+                updated_ann.queue_depth = queue_depth;
+                updated_ann.load = load;
+                registry.update_announcement(updated_ann.clone());
+                let mut reg = gateway_state.registry.lock().await;
+                reg.update_announcement(updated_ann);
+            }
+        }
+
+        InferenceMessage::NodeListRequest {
+            model_filter,
+            max_price,
+        } => {
+            log::debug!("Node list request: filter={:?}, max_price={:?}", model_filter, max_price);
+            // Respond with available nodes matching the filter
+            let nodes = if let Some(model_id) = &model_filter {
+                registry.find_nodes_with_pricing(model_id, max_price)
+            } else {
+                // Return all nodes
+                registry.get_all_nodes_info()
+            };
+            let response = InferenceMessage::NodeListResponse { nodes };
+            if let Ok(data) = serde_json::to_vec(&response) {
+                network.broadcast("ynet-inference", data).await;
+            }
+        }
+
+        InferenceMessage::NodeListResponse { nodes } => {
+            log::debug!("Received node list with {} nodes", nodes.len());
+            // Update local registry with received nodes
+            // This is informational - the actual announcements are more detailed
+            for node in nodes {
+                log::trace!(
+                    "Available: {} at {} for {} (price: {}/1k)",
+                    node.peer_id,
+                    node.address,
+                    node.model_id,
+                    node.price_input_per_1k
+                );
+            }
+        }
+
+        InferenceMessage::RoutedInference {
+            request_id,
+            target_peer,
+            from_peer,
+            request,
+            max_price,
+        } => {
+            // Only process if we're the target
+            if target_peer != network.local_peer_id() {
+                return;
+            }
+
+            let model_id = &request.model;
+            if !service.has_model(model_id) {
+                log::warn!("Routed request {} for model {} but we don't have it", request_id, model_id);
+                return;
+            }
+
+            log::info!(
+                "Processing routed inference {} for model {} from {} (max_price: {:?})",
+                request_id,
+                model_id,
+                from_peer,
+                max_price
+            );
+
+            stream_inference_response(service, model_id, &request, &request_id, &from_peer, network).await;
+        }
+
+        InferenceMessage::InferenceBilling {
+            request_id,
+            node_address,
+            user_address,
+            input_tokens,
+            output_tokens,
+            price_per_1k,
+            total_cost_nynet,
+        } => {
+            log::info!(
+                "Billing record for {}: node={}, user={}, cost={} nYNET ({}+{} tokens @ {}/1k)",
+                request_id,
+                node_address,
+                user_address,
+                total_cost_nynet,
+                input_tokens,
+                output_tokens,
+                price_per_1k
+            );
+            // In a full implementation, this would be recorded on-chain
+            // For MVP, we just log it
         }
     }
 }
