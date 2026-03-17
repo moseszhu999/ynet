@@ -23,7 +23,8 @@ export class CoreBridge {
 
   async start(): Promise<void> {
     const coreBinaryName = process.platform === 'win32' ? 'ynet-node.exe' : 'ynet-node';
-    const corePath = path.resolve(__dirname, '../../core/target/debug', coreBinaryName);
+    // From desktop/dist/bridge/ to ynet/core/target/debug
+    const corePath = path.resolve(__dirname, '../../../core/target/debug', coreBinaryName);
 
     const args = ['--port', String(this.listenPort)];
     for (const seed of this.seedNodes) {

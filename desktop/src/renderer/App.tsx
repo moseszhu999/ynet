@@ -9,28 +9,41 @@ type Tab = 'wallet' | 'tasks' | 'inference' | 'network';
 declare global {
   interface Window {
     ynet?: {
+      // Status
       getStatus: () => Promise<any>;
       getNetwork: () => Promise<any>;
       getWallet: () => Promise<any>;
       getChain: () => Promise<any>;
       getScheduler: () => Promise<any>;
+
+      // Blockchain
       transfer: (to: string, amount: number) => Promise<any>;
       produceBlock: () => Promise<any>;
-      submitTask: (params: any) => Promise<any>;
+
+      // Scheduler
+      submitTask: (params: { command: string; docker_image?: string; timeout?: number; price?: number }) => Promise<any>;
       executeLocal: (command: string) => Promise<any>;
       listTasks: () => Promise<any>;
       claimTask: (task_id: string) => Promise<any>;
+
+      // Economics
       getEconomics: () => Promise<any>;
       getPricing: (model?: string) => Promise<any>;
       listPricing: () => Promise<any>;
-      estimateCost: (params: any) => Promise<any>;
+      estimateCost: (params: { model: string; input_tokens: number; output_tokens: number; currency?: string }) => Promise<any>;
       getReputation: (address?: string) => Promise<any>;
       getBlockInfo: () => Promise<any>;
+
+      // Inference
       getInference: () => Promise<any>;
       loadModel: (params: { model_id: string; path: string; backend: string; port: number }) => Promise<any>;
       unloadModel: (model_id: string) => Promise<any>;
+
+      // P2P
       broadcast: (message: string, topic?: string) => Promise<any>;
       dial: (address: string) => Promise<any>;
+
+      // Events
       onEvent: (callback: (event: { event: string; data: any }) => void) => (() => void) | void;
     };
   }
