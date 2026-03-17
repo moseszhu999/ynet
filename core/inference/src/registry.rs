@@ -18,6 +18,12 @@ pub struct NodeRegistry {
     announcements: HashMap<String, NodeAnnouncement>,
 }
 
+impl Default for NodeRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeRegistry {
     pub fn new() -> Self {
         NodeRegistry {
@@ -241,7 +247,7 @@ mod tests {
         let now = current_timestamp();
 
         NodeCapability {
-            address: format!("ynet1{}", peer_id),
+            address: format!("ynet1{peer_id}"),
             peer_id: peer_id.to_string(),
             gpus: vec![GpuInfo {
                 name: "RTX 4090".to_string(),

@@ -92,7 +92,7 @@ impl Block {
     /// Lower score = higher priority to produce.
     /// Deterministic — every node computes the same result.
     pub fn compute_election_score(prev_hash: &str, address: &str, slot: u64) -> String {
-        let data = format!("{}{}{}", prev_hash, address, slot);
+        let data = format!("{prev_hash}{address}{slot}");
         let mut hasher = Sha256::new();
         hasher.update(data.as_bytes());
         hex::encode(hasher.finalize())

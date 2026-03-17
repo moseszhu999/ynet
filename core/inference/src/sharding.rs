@@ -149,7 +149,7 @@ impl ShardingManager {
             }
             ShardStrategy::None => None,
             _ => {
-                log::warn!("Sharding strategy {:?} not yet implemented", strategy);
+                log::warn!("Sharding strategy {strategy:?} not yet implemented");
                 None
             }
         }
@@ -185,7 +185,7 @@ impl ShardingManager {
                 let chunk = full_text[start..end].to_string();
 
                 ShardConfig {
-                    shard_id: format!("shard-{}", i),
+                    shard_id: format!("shard-{i}"),
                     node,
                     shard_type: ShardType::PromptPrefix { tokens: (end - start) as u32 / 4 },
                     input: ShardInput::Text(chunk),

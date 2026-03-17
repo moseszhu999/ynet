@@ -2,7 +2,6 @@
 //!
 //! Tracks node performance and adjusts reputation scores based on behavior.
 
-use crate::types::NodeInfo;
 use crate::utils::current_timestamp;
 use std::collections::VecDeque;
 use std::collections::HashMap;
@@ -87,6 +86,12 @@ impl Default for NodeReputation {
 pub struct ReputationTracker {
     /// Reputation records per peer_id.
     records: HashMap<String, NodeReputation>,
+}
+
+impl Default for ReputationTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ReputationTracker {

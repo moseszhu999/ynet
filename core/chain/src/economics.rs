@@ -284,6 +284,12 @@ pub struct EconomicsState {
     pub reputations: HashMap<String, NodeReputation>,
 }
 
+impl Default for EconomicsState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EconomicsState {
     pub fn new() -> Self {
         EconomicsState {

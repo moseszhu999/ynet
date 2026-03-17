@@ -134,18 +134,18 @@ impl NetworkNode {
         swarm.behaviour_mut().gossipsub.subscribe(&inference_topic)?;
 
         // Listen on the specified port
-        let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", listen_port).parse()?;
+        let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{listen_port}").parse()?;
         swarm.listen_on(listen_addr)?;
 
-        info!("P2P node started: {}", local_peer_id_str);
+        info!("P2P node started: {local_peer_id_str}");
 
         // Dial seed nodes
         for addr_str in &seed_nodes {
             if let Ok(addr) = addr_str.parse::<Multiaddr>() {
-                info!("Dialing seed node: {}", addr);
+                info!("Dialing seed node: {addr}");
                 let _ = swarm.dial(addr);
             } else {
-                warn!("Invalid seed node address: {}", addr_str);
+                warn!("Invalid seed node address: {addr_str}");
             }
         }
 
@@ -230,11 +230,11 @@ async fn event_loop(
                     Some(NetworkCommand::Broadcast { topic, data }) => {
                         let gossip_topic = gossipsub::IdentTopic::new(&topic);
                         if let Err(e) = swarm.behaviour_mut().gossipsub.publish(gossip_topic, data) {
-                            warn!("Failed to publish message: {}", e);
+                            warn!("Failed to publish message: {e}");
                         }
                     }
                     Some(NetworkCommand::Dial(addr)) => {
-                        info!("Dialing: {}", addr);
+                        info!("Dialing: {addr}");
                         let _ = swarm.dial(addr);
                     }
                     None => break,
@@ -245,16 +245,16 @@ async fn event_loop(
             event = swarm.select_next_some() => {
                 match event {
                     SwarmEvent::NewListenAddr { address, .. } => {
-                        info!("Listening on: {}", address);
+                        info!("Listening on: {address}");
                         listening_addresses.push(address);
                     }
                     SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                        info!("Connected to: {}", peer_id);
+                        info!("Connected to: {peer_id}");
                         connected_peers.entry(peer_id).or_default();
                         let _ = event_tx.send(NetworkEvent::PeerConnected(peer_id.to_string())).await;
                     }
                     SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                        info!("Disconnected from: {}", peer_id);
+                        info!("Disconnected from: {peer_id}");
                         connected_peers.remove(&peer_id);
                         let _ = event_tx.send(NetworkEvent::PeerDisconnected(peer_id.to_string())).await;
                     }
@@ -262,7 +262,7 @@ async fn event_loop(
                     // mDNS events — auto-discover LAN peers
                     SwarmEvent::Behaviour(YnetBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                         for (peer_id, addr) in list {
-                            info!("mDNS discovered: {} at {}", peer_id, addr);
+                            info!("mDNS discovered: {peer_id} at {addr}");
                             swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                             swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
                             let _ = swarm.dial(addr);
@@ -270,7 +270,7 @@ async fn event_loop(
                     }
                     SwarmEvent::Behaviour(YnetBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
                         for (peer_id, _) in list {
-                            debug!("mDNS expired: {}", peer_id);
+                            debug!("mDNS expired: {peer_id}");
                         }
                     }
 
@@ -281,7 +281,7 @@ async fn event_loop(
                         ..
                     })) => {
                         let topic = message.topic.to_string();
-                        info!("GossipSub message from {} on topic {}", propagation_source, topic);
+                        info!("GossipSub message from {propagation_source} on topic {topic}");
                         let _ = event_tx.send(NetworkEvent::MessageReceived {
                             from: propagation_source.to_string(),
                             topic,

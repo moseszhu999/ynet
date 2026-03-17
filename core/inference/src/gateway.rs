@@ -63,15 +63,15 @@ pub fn create_router(state: Arc<GatewayState>) -> Router {
 /// Start the API gateway on the given port.
 pub async fn start_gateway(state: Arc<GatewayState>, port: u16) -> Result<(), String> {
     let app = create_router(state);
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
-        .map_err(|e| format!("failed to bind gateway: {}", e))?;
+        .map_err(|e| format!("failed to bind gateway: {e}"))?;
 
-    log::info!("API gateway listening on port {}", port);
+    log::info!("API gateway listening on port {port}");
 
     tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
-            log::error!("Gateway server error: {}", e);
+            log::error!("Gateway server error: {e}");
         }
     });
 
@@ -133,7 +133,7 @@ async fn chat_completions(
     let target_peer = target_peer.ok_or_else(|| {
         err_json(
             StatusCode::NOT_FOUND,
-            &format!("model '{}' not available on any node", model_id),
+            &format!("model '{model_id}' not available on any node"),
         )
     })?;
 
@@ -151,7 +151,7 @@ async fn handle_local_request(
     let client = reqwest::Client::builder()
         .no_proxy()
         .build()
-        .map_err(|e| err_json(StatusCode::INTERNAL_SERVER_ERROR, &format!("failed to create client: {}", e)))?;
+        .map_err(|e| err_json(StatusCode::INTERNAL_SERVER_ERROR, &format!("failed to create client: {e}")))?;
 
     // Map model name if backend requires a specific name
     let mut req = request.clone();
@@ -181,20 +181,19 @@ async fn handle_local_request(
                         while let Some(pos) = buffer.find("\n\n") {
                             let line = buffer[..pos].to_string();
                             buffer = buffer[pos + 2..].to_string();
-                            if line.starts_with("data: ") {
-                                let data = &line[6..];
+                            if let Some(data) = line.strip_prefix("data: ") {
                                 if data == "[DONE]" {
                                     yield Ok::<Event, std::convert::Infallible>(
                                         Event::default().data("[DONE]")
                                     );
                                 } else {
-                                    yield Ok(Event::default().data(data.to_string()));
+                                    yield Ok(Event::default().data(data));
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        log::warn!("Stream error: {}", e);
+                        log::warn!("Stream error: {e}");
                         break;
                     }
                 }
@@ -212,12 +211,12 @@ async fn handle_local_request(
 
         // Get raw text first for debugging
         let response_text = response.text().await
-            .map_err(|e| err_json(StatusCode::BAD_GATEWAY, &format!("failed to read response: {}", e)))?;
+            .map_err(|e| err_json(StatusCode::BAD_GATEWAY, &format!("failed to read response: {e}")))?;
 
         let body: ChatCompletionResponse = serde_json::from_str(&response_text)
             .map_err(|e| {
                 log::error!("Failed to parse response: {}. Raw response: {}", e, &response_text[..response_text.len().min(500)]);
-                err_json(StatusCode::BAD_GATEWAY, &format!("error decoding response body: {}", e))
+                err_json(StatusCode::BAD_GATEWAY, &format!("error decoding response body: {e}"))
             })?;
 
         Ok(Json(body).into_response())

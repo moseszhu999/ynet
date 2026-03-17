@@ -258,7 +258,7 @@ mod tests {
     ) -> NodeInfo {
         NodeInfo {
             peer_id: peer_id.to_string(),
-            address: format!("ynet1{}", peer_id),
+            address: format!("ynet1{peer_id}"),
             model_id: "test-model".to_string(),
             price_input_per_1k: price,
             price_output_per_1k: price / 2,

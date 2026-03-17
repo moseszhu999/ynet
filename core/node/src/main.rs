@@ -134,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Start P2P network
     let mut network = NetworkNode::start(args.port, args.seed).await?;
     log::info!("P2P node started: {}", network.local_peer_id());
-    log::info!("Wallet address: {}", my_address);
+    log::info!("Wallet address: {my_address}");
 
     // ---- Inference layer ----
     let mut inference_service = InferenceService::new(&my_address, network.local_peer_id());
@@ -186,19 +186,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         port,
                         backend_model_name,
                     });
-                    log::info!("Model {} loaded on port {}", model_id, port);
+                    log::info!("Model {model_id} loaded on port {port}");
                 }
-                Err(e) => log::error!("Failed to load model {}: {}", model_id, e),
+                Err(e) => log::error!("Failed to load model {model_id}: {e}"),
             }
         } else {
-            log::error!("Invalid --load-model format: '{}'. Expected model_id:backend:path:port[:backend_model_name]", spec);
+            log::error!("Invalid --load-model format: '{spec}'. Expected model_id:backend:path:port[:backend_model_name]");
         }
     }
 
     // Start API gateway if requested
     if let Some(api_port) = args.api_port {
         if let Err(e) = gateway::start_gateway(gateway_state.clone(), api_port).await {
-            log::error!("Failed to start API gateway: {}", e);
+            log::error!("Failed to start API gateway: {e}");
         }
     }
 
@@ -340,8 +340,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         .as_millis() as u64;
                     let elapsed_in_slot_ms = now_ms.saturating_sub(slot_start_ms);
 
-                    if elapsed_in_slot_ms >= delay_ms {
-                        if blockchain.latest_block().slot < current_slot {
+                    if elapsed_in_slot_ms >= delay_ms
+                        && blockchain.latest_block().slot < current_slot {
                             last_produced_slot = current_slot;
                             let block = blockchain.produce_block(&my_address);
                             let msg = ChainMessage::NewBlock(block.clone());
@@ -355,7 +355,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                 "election_score": &block.election_score[..16],
                             }));
                         }
-                    }
                 }
             }
         }
@@ -388,7 +387,7 @@ fn handle_chain_message(msg: ChainMessage, blockchain: &mut Blockchain, from: &s
         }
         ChainMessage::NewTransaction(tx) => {
             if let Err(e) = blockchain.add_transaction(tx) {
-                log::warn!("Rejected transaction from {}: {}", from, e);
+                log::warn!("Rejected transaction from {from}: {e}");
             }
         }
     }
@@ -590,7 +589,7 @@ async fn handle_inference_message(
                 return;
             }
 
-            log::info!("Processing inference request {} for model {}", request_id, model_id);
+            log::info!("Processing inference request {request_id} for model {model_id}");
             stream_inference_response(service, model_id, &request, &request_id, &from_peer, network).await;
         }
 
@@ -650,7 +649,7 @@ async fn handle_inference_message(
             queue_depth,
             load,
         } => {
-            log::trace!("Heartbeat from {}: queue={}, load={:.2}", peer_id, queue_depth, load);
+            log::trace!("Heartbeat from {peer_id}: queue={queue_depth}, load={load:.2}");
             // Update registry with latest status
             if let Some(cap) = registry.get_node(&peer_id) {
                 let mut updated = cap.clone();
@@ -673,7 +672,7 @@ async fn handle_inference_message(
             model_filter,
             max_price,
         } => {
-            log::debug!("Node list request: filter={:?}, max_price={:?}", model_filter, max_price);
+            log::debug!("Node list request: filter={model_filter:?}, max_price={max_price:?}");
             // Respond with available nodes matching the filter
             let nodes = if let Some(model_id) = &model_filter {
                 registry.find_nodes_with_pricing(model_id, max_price)
@@ -716,16 +715,12 @@ async fn handle_inference_message(
 
             let model_id = &request.model;
             if !service.has_model(model_id) {
-                log::warn!("Routed request {} for model {} but we don't have it", request_id, model_id);
+                log::warn!("Routed request {request_id} for model {model_id} but we don't have it");
                 return;
             }
 
             log::info!(
-                "Processing routed inference {} for model {} from {} (max_price: {:?})",
-                request_id,
-                model_id,
-                from_peer,
-                max_price
+                "Processing routed inference {request_id} for model {model_id} from {from_peer} (max_price: {max_price:?})"
             );
 
             stream_inference_response(service, model_id, &request, &request_id, &from_peer, network).await;
@@ -741,14 +736,7 @@ async fn handle_inference_message(
             total_cost_nynet,
         } => {
             log::info!(
-                "Billing record for {}: node={}, user={}, cost={} nYNET ({}+{} tokens @ {}/1k)",
-                request_id,
-                node_address,
-                user_address,
-                total_cost_nynet,
-                input_tokens,
-                output_tokens,
-                price_per_1k
+                "Billing record for {request_id}: node={node_address}, user={user_address}, cost={total_cost_nynet} nYNET ({input_tokens}+{output_tokens} tokens @ {price_per_1k}/1k)"
             );
             // In a full implementation, this would be recorded on-chain
             // For MVP, we just log it

@@ -17,6 +17,12 @@ pub struct Blockchain {
     balances: HashMap<String, u64>,
 }
 
+impl Default for Blockchain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Blockchain {
     pub fn new() -> Self {
         let genesis = Block::genesis();

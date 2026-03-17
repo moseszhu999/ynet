@@ -8,6 +8,12 @@ use tokio::process::Command;
 
 pub struct TaskExecutor;
 
+impl Default for TaskExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TaskExecutor {
     pub fn new() -> Self {
         TaskExecutor
@@ -75,7 +81,7 @@ impl TaskExecutor {
         let output = tokio::time::timeout(timeout, future)
             .await
             .map_err(|_| format!("task timed out after {}s", task.spec.timeout_secs))?
-            .map_err(|e| format!("failed to spawn process: {}", e))?;
+            .map_err(|e| format!("failed to spawn process: {e}"))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -87,7 +93,7 @@ impl TaskExecutor {
     async fn execute_docker(&self, task: &ComputeTask, image: &str) -> Result<(i32, String, String), String> {
         // Validate image name: only allow safe characters
         if !image.chars().all(|c| c.is_alphanumeric() || "._/-:".contains(c)) {
-            return Err(format!("invalid docker image name: {}", image));
+            return Err(format!("invalid docker image name: {image}"));
         }
 
         let timeout = Duration::from_secs(task.spec.timeout_secs);
@@ -107,7 +113,7 @@ impl TaskExecutor {
         let output = tokio::time::timeout(timeout, future)
             .await
             .map_err(|_| format!("docker task timed out after {}s", task.spec.timeout_secs))?
-            .map_err(|e| format!("failed to run docker: {}", e))?;
+            .map_err(|e| format!("failed to run docker: {e}"))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();

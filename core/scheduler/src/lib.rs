@@ -102,7 +102,7 @@ impl Scheduler {
             if task.status == TaskStatus::Pending {
                 task.status = TaskStatus::Running;
                 task.worker = Some(self.node_address.clone());
-                log::info!("Claimed task: {}", task_id);
+                log::info!("Claimed task: {task_id}");
                 return Some(task.clone());
             }
         }
@@ -115,7 +115,7 @@ impl Scheduler {
             if task.status == TaskStatus::Pending {
                 task.status = TaskStatus::Running;
                 task.worker = Some(worker_id.to_string());
-                log::info!("Task {} claimed by {}", task_id, worker_id);
+                log::info!("Task {task_id} claimed by {worker_id}");
             }
         }
     }

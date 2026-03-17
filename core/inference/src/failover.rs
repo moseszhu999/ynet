@@ -5,7 +5,6 @@
 use crate::registry::NodeRegistry;
 use crate::router::{InferenceRouter, RoutingPreferences};
 use crate::types::{ChatCompletionRequest, NodeInfo};
-use crate::utils::current_timestamp;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,6 +21,7 @@ const NODE_FAILURE_COOLDOWN_SECS: u64 = 60;
 
 /// Health status of a node.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct NodeHealth {
     /// Number of consecutive failures.
     pub consecutive_failures: u32,
@@ -33,16 +33,6 @@ pub struct NodeHealth {
     pub last_success: Option<u64>,
 }
 
-impl Default for NodeHealth {
-    fn default() -> Self {
-        Self {
-            consecutive_failures: 0,
-            last_failure: None,
-            is_failed: false,
-            last_success: None,
-        }
-    }
-}
 
 /// Tracks node health for failover decisions.
 pub struct FailoverManager {
@@ -137,7 +127,7 @@ impl FailoverManager {
         health.last_success = Some(now);
         health.is_failed = false;
 
-        log::debug!("Node {} marked as healthy", peer_id);
+        log::debug!("Node {peer_id} marked as healthy");
     }
 
     /// Check if a node is currently healthy.

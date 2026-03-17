@@ -94,7 +94,7 @@ impl InferenceService {
                             name: "Apple Silicon (Metal)".to_string(),
                             vram_mb: gpu_mem_mb,
                         }];
-                        info!("Detected Apple Silicon: ~{} MB unified memory for GPU", gpu_mem_mb);
+                        info!("Detected Apple Silicon: ~{gpu_mem_mb} MB unified memory for GPU");
                         return;
                     }
                 }
@@ -114,12 +114,12 @@ impl InferenceService {
         port: u16,
     ) -> Result<(), String> {
         if self.backends.contains_key(model_id) {
-            return Err(format!("model {} already loaded", model_id));
+            return Err(format!("model {model_id} already loaded"));
         }
 
         let child = match backend {
             InferenceBackend::LlamaCpp => {
-                info!("Starting llama.cpp server for {} on port {}", model_id, port);
+                info!("Starting llama.cpp server for {model_id} on port {port}");
                 Command::new("llama-server")
                     .args([
                         "-m", model_path,
@@ -131,10 +131,10 @@ impl InferenceService {
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .spawn()
-                    .map_err(|e| format!("failed to start llama-server: {}", e))?
+                    .map_err(|e| format!("failed to start llama-server: {e}"))?
             }
             InferenceBackend::Vllm => {
-                info!("Starting vLLM server for {} on port {}", model_id, port);
+                info!("Starting vLLM server for {model_id} on port {port}");
                 Command::new("python3")
                     .args([
                         "-m", "vllm.entrypoints.openai.api_server",
@@ -145,16 +145,16 @@ impl InferenceService {
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .spawn()
-                    .map_err(|e| format!("failed to start vLLM: {}", e))?
+                    .map_err(|e| format!("failed to start vLLM: {e}"))?
             }
             InferenceBackend::Ollama => {
                 // Ollama manages its own server, just pull the model
-                info!("Pulling model {} via Ollama", model_id);
+                info!("Pulling model {model_id} via Ollama");
                 let status = Command::new("ollama")
                     .args(["pull", model_path])
                     .status()
                     .await
-                    .map_err(|e| format!("failed to run ollama pull: {}", e))?;
+                    .map_err(|e| format!("failed to run ollama pull: {e}"))?;
                 if !status.success() {
                     return Err("ollama pull failed".to_string());
                 }
@@ -174,7 +174,7 @@ impl InferenceService {
                         backend_model_name: Some(model_path.to_string()),
                     },
                 );
-                info!("Model {} ready via Ollama (backend name: {})", model_id, model_path);
+                info!("Model {model_id} ready via Ollama (backend name: {model_path})");
                 return Ok(());
             }
             InferenceBackend::Custom => {
@@ -193,7 +193,7 @@ impl InferenceService {
                         backend_model_name: None,
                     },
                 );
-                info!("Registered custom backend for {} on port {}", model_id, port);
+                info!("Registered custom backend for {model_id} on port {port}");
                 return Ok(());
             }
         };
@@ -216,7 +216,7 @@ impl InferenceService {
         // Wait a moment for the server to start
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-        info!("Model {} loaded and serving on port {}", model_id, port);
+        info!("Model {model_id} loaded and serving on port {port}");
         Ok(())
     }
 
@@ -226,10 +226,10 @@ impl InferenceService {
             if let Some(ref mut child) = bp.process {
                 let _ = child.kill().await;
             }
-            info!("Unloaded model {}", model_id);
+            info!("Unloaded model {model_id}");
             Ok(())
         } else {
-            Err(format!("model {} not loaded", model_id))
+            Err(format!("model {model_id} not loaded"))
         }
     }
 
@@ -242,7 +242,7 @@ impl InferenceService {
         let bp = self
             .backends
             .get(model_id)
-            .ok_or_else(|| format!("model {} not loaded", model_id))?;
+            .ok_or_else(|| format!("model {model_id} not loaded"))?;
 
         let url = match bp.model.backend {
             InferenceBackend::Ollama => {
@@ -261,10 +261,10 @@ impl InferenceService {
             .json(request)
             .send()
             .await
-            .map_err(|e| format!("backend request failed: {}", e))?
+            .map_err(|e| format!("backend request failed: {e}"))?
             .json::<ChatCompletionResponse>()
             .await
-            .map_err(|e| format!("failed to parse backend response: {}", e));
+            .map_err(|e| format!("failed to parse backend response: {e}"));
 
         self.active_requests = self.active_requests.saturating_sub(1);
         result
@@ -279,7 +279,7 @@ impl InferenceService {
         let bp = self
             .backends
             .get(model_id)
-            .ok_or_else(|| format!("model {} not loaded", model_id))?;
+            .ok_or_else(|| format!("model {model_id} not loaded"))?;
 
         let url = format!("http://127.0.0.1:{}/v1/chat/completions", bp.model.port);
 
@@ -295,7 +295,7 @@ impl InferenceService {
             .json(&req)
             .send()
             .await
-            .map_err(|e| format!("backend stream request failed: {}", e))?;
+            .map_err(|e| format!("backend stream request failed: {e}"))?;
 
         // Note: caller must decrement active_requests when done
         Ok(response)
@@ -344,7 +344,7 @@ impl InferenceService {
     pub async fn shutdown(&mut self) {
         for (model_id, mut bp) in self.backends.drain() {
             if let Some(ref mut child) = bp.process {
-                warn!("Shutting down backend for {}", model_id);
+                warn!("Shutting down backend for {model_id}");
                 let _ = child.kill().await;
             }
         }
