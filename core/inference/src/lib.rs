@@ -8,8 +8,10 @@
 //! Models load once and stay resident in GPU memory. Requests route to nodes
 //! that have the model loaded, with smart load balancing.
 
+pub mod failover;
 pub mod gateway;
 pub mod registry;
+pub mod reputation;
 pub mod router;
 pub mod service;
 pub mod types;
@@ -17,6 +19,7 @@ pub mod utils;
 
 pub use gateway::{GatewayState, LocalBackendInfo, StreamEvent};
 pub use registry::NodeRegistry;
+pub use reputation::{ReputationEvent, ReputationEventType, ReputationTracker, SharedReputationTracker};
 pub use router::{InferenceRouter, RoutingDecision, RoutingPreferences, RoutingReason};
 pub use service::InferenceService;
 pub use types::{
