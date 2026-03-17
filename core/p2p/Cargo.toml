@@ -1,0 +1,24 @@
+[package]
+name = "ynet-p2p"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+libp2p = { version = "0.54", features = [
+    "tokio",
+    "tcp",
+    "noise",
+    "yamux",
+    "mdns",
+    "kad",
+    "gossipsub",
+    "identify",
+    "macros",
+] }
+futures = "0.3"
+once_cell = "1"

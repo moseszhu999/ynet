@@ -1,0 +1,13 @@
+appId: com.ynet.desktop
+productName: yNet
+directories:
+  output: release
+files:
+  - dist/**/*
+  - node_modules/**/*
+mac:
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage

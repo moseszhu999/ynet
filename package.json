@@ -1,0 +1,15 @@
+{
+  "name": "ynet",
+  "version": "0.1.0",
+  "private": true,
+  "description": "yNet - Decentralized Computing Network",
+  "scripts": {
+    "dev": "cd desktop && npm run dev",
+    "build": "cd desktop && npm run build",
+    "build:core": "cd core && cargo build --release",
+    "test:core": "cd core && cargo test"
+  },
+  "workspaces": [
+    "desktop"
+  ]
+}

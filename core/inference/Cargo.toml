@@ -1,0 +1,18 @@
+[package]
+name = "ynet-inference"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+log.workspace = true
+thiserror.workspace = true
+axum = { version = "0.8", features = ["json"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+tokio-stream = "0.1"
+uuid = { version = "1", features = ["v4"] }
+futures = "0.3"
+async-stream = "0.3"
