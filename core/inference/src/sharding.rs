@@ -425,4 +425,224 @@ mod tests {
         assert!(aggregator.is_complete());
         assert!(aggregator.has_failures());
     }
+
+    #[test]
+    fn test_plan_shards_with_nodes() {
+        use crate::types::{NodeAnnouncement, ModelPricing, InferenceBackend};
+        use crate::registry::NodeRegistry;
+
+        let mut registry = NodeRegistry::new();
+        let now = crate::utils::current_timestamp();
+
+        // Add two nodes with the same model
+        registry.update_announcement(NodeAnnouncement {
+            address: "ynet1node1".to_string(),
+            peer_id: "node1".to_string(),
+            listen_addrs: vec!["/ip4/127.0.0.1/tcp/4001".to_string()],
+            gpus: vec![],
+            vram_total_mb: 24576,
+            models: vec![ModelPricing {
+                model_id: "test-model".to_string(),
+                backend: InferenceBackend::LlamaCpp,
+                port: 8080,
+                price_input_per_1k: 100,
+                price_output_per_1k: 50,
+                max_context: 4096,
+                avg_latency_ms: 100,
+            }],
+            max_concurrent: 4,
+            queue_depth: 1,
+            load: 0.25,
+            timestamp: now,
+            reputation: 90,
+        });
+
+        registry.update_announcement(NodeAnnouncement {
+            address: "ynet1node2".to_string(),
+            peer_id: "node2".to_string(),
+            listen_addrs: vec!["/ip4/127.0.0.1/tcp/4002".to_string()],
+            gpus: vec![],
+            vram_total_mb: 24576,
+            models: vec![ModelPricing {
+                model_id: "test-model".to_string(),
+                backend: InferenceBackend::LlamaCpp,
+                port: 8080,
+                price_input_per_1k: 100,
+                price_output_per_1k: 50,
+                max_context: 4096,
+                avg_latency_ms: 100,
+            }],
+            max_concurrent: 4,
+            queue_depth: 0,
+            load: 0.1,
+            timestamp: now,
+            reputation: 95,
+        });
+
+        let shared_registry = Arc::new(RwLock::new(registry));
+        let manager = ShardingManager::new(shared_registry);
+
+        // Create a long prompt
+        let long_content = "x".repeat(20000);
+        let request = ChatCompletionRequest {
+            model: "test-model".to_string(),
+            messages: vec![crate::types::ChatMessage {
+                role: "user".to_string(),
+                content: long_content,
+            }],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            ynet_address: None,
+        };
+
+        // Test planning shards (this would be async in real use)
+        // For this test, we just verify the manager is set up correctly
+        assert!(manager.should_shard(&request));
+    }
+
+    #[test]
+    fn test_shard_config_creation() {
+        let node = NodeInfo {
+            peer_id: "node1".to_string(),
+            address: "ynet1node1".to_string(),
+            model_id: "test-model".to_string(),
+            price_input_per_1k: 100,
+            price_output_per_1k: 50,
+            avg_latency_ms: 100,
+            load: 0.25,
+            reputation: 90,
+        };
+
+        let config = ShardConfig {
+            shard_id: "shard-0".to_string(),
+            node,
+            shard_type: ShardType::PromptPrefix { tokens: 1000 },
+            input: ShardInput::Text("Test input".to_string()),
+        };
+
+        assert_eq!(config.shard_id, "shard-0");
+        assert_eq!(config.node.peer_id, "node1");
+    }
+
+    #[test]
+    fn test_shard_output_types() {
+        // Test Text output
+        let text_output = ShardOutput::Text("Hello".to_string());
+        match text_output {
+            ShardOutput::Text(s) => assert_eq!(s, "Hello"),
+            _ => panic!("Expected Text variant"),
+        }
+
+        // Test Tokens output
+        let tokens_output = ShardOutput::Tokens(vec![1, 2, 3]);
+        match tokens_output {
+            ShardOutput::Tokens(ids) => assert_eq!(ids.len(), 3),
+            _ => panic!("Expected Tokens variant"),
+        }
+
+        // Test HiddenStates output
+        let hidden_output = ShardOutput::HiddenStates(vec![0.1, 0.2, 0.3]);
+        match hidden_output {
+            ShardOutput::HiddenStates(states) => assert_eq!(states.len(), 3),
+            _ => panic!("Expected HiddenStates variant"),
+        }
+
+        // Test Logits output
+        let logits_output = ShardOutput::Logits(vec![0.5, 0.3, 0.2]);
+        match logits_output {
+            ShardOutput::Logits(l) => assert_eq!(l.len(), 3),
+            _ => panic!("Expected Logits variant"),
+        }
+    }
+
+    #[test]
+    fn test_aggregator_timing_stats() {
+        let mut aggregator = ResultAggregator::new("req-1".to_string(), 3);
+
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-0".to_string(),
+            node_id: "node-1".to_string(),
+            processing_time_ms: 100,
+            output: ShardOutput::Text("A".to_string()),
+            error: None,
+        });
+
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-1".to_string(),
+            node_id: "node-2".to_string(),
+            processing_time_ms: 200,
+            output: ShardOutput::Text("B".to_string()),
+            error: None,
+        });
+
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-2".to_string(),
+            node_id: "node-3".to_string(),
+            processing_time_ms: 150,
+            output: ShardOutput::Text("C".to_string()),
+            error: None,
+        });
+
+        assert_eq!(aggregator.total_processing_time_ms(), 450);
+        assert_eq!(aggregator.max_processing_time_ms(), 200);
+    }
+
+    #[test]
+    fn test_aggregator_partial_results() {
+        let mut aggregator = ResultAggregator::new("req-1".to_string(), 3);
+
+        // Add only 2 of 3 results
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-0".to_string(),
+            node_id: "node-1".to_string(),
+            processing_time_ms: 100,
+            output: ShardOutput::Text("A".to_string()),
+            error: None,
+        });
+
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-1".to_string(),
+            node_id: "node-2".to_string(),
+            processing_time_ms: 150,
+            output: ShardOutput::Text("B".to_string()),
+            error: None,
+        });
+
+        assert!(!aggregator.is_complete());
+        assert_eq!(aggregator.aggregate(), None); // Not complete, no result
+    }
+
+    #[test]
+    fn test_aggregator_order_preservation() {
+        let mut aggregator = ResultAggregator::new("req-1".to_string(), 3);
+
+        // Add in non-sequential order
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-2".to_string(),
+            node_id: "node-3".to_string(),
+            processing_time_ms: 100,
+            output: ShardOutput::Text("C".to_string()),
+            error: None,
+        });
+
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-0".to_string(),
+            node_id: "node-1".to_string(),
+            processing_time_ms: 100,
+            output: ShardOutput::Text("A".to_string()),
+            error: None,
+        });
+
+        aggregator.add_result(ShardResult {
+            shard_id: "shard-1".to_string(),
+            node_id: "node-2".to_string(),
+            processing_time_ms: 100,
+            output: ShardOutput::Text("B".to_string()),
+            error: None,
+        });
+
+        // Result should be sorted by shard_id
+        assert_eq!(aggregator.aggregate(), Some("ABC".to_string()));
+    }
 }
