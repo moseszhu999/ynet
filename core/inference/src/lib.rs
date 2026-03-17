@@ -14,6 +14,7 @@ pub mod registry;
 pub mod reputation;
 pub mod router;
 pub mod service;
+pub mod sharding;
 pub mod types;
 pub mod utils;
 
@@ -22,6 +23,7 @@ pub use registry::NodeRegistry;
 pub use reputation::{ReputationEvent, ReputationEventType, ReputationTracker, SharedReputationTracker};
 pub use router::{InferenceRouter, RoutingDecision, RoutingPreferences, RoutingReason};
 pub use service::InferenceService;
+pub use sharding::{ResultAggregator, ShardConfig, ShardInput, ShardOutput, ShardResult, ShardStrategy, ShardType, ShardingManager};
 pub use types::{
     ChatCompletionRequest, ChatCompletionResponse, InferenceBackend, InferenceMessage,
     NodeCapability, NodeAnnouncement, NodeInfo, ModelPricing, GpuInfo, LoadedModel,
